@@ -1,0 +1,16 @@
+{
+  "app-name": "SentinelOpsRemote",
+  "display": {
+    "product": "SentinelOps Remote",
+    "description": "SentinelOps Remote Support",
+    "company": "SentinelOps"
+  },
+  "default-settings": {},
+  "override-settings": {
+    "enforce-e2ee": "Y",
+    "allow-auto-update": "N",
+    "enable-check-update": "N",
+    "allow-insecure-tls-fallback": "N",
+    "allow-hostname-as-id": "N"
+  }
+}

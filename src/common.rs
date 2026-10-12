@@ -2358,6 +2358,9 @@ pub fn rustdesk_interval(i: Interval) -> ThrottledInterval {
 }
 
 pub fn load_custom_client() {
+    if apply_embedded_brand() {
+        return;
+    }
     #[cfg(debug_assertions)]
     if let Ok(data) = std::fs::read_to_string("./custom.txt") {
         read_custom_client(data.trim());
@@ -2526,6 +2529,73 @@ pub fn read_custom_client(config: &str) {
                 .insert(k, v.to_owned());
         };
     }
+}
+
+/// A white-label build compiles its brand into the binary (res/brand/brand.json,
+/// same keys as a custom.txt payload). It is trusted because it is part of the
+/// signed executable, and while it is present custom.txt is never read, so a
+/// dropped file cannot repoint a branded build. The default file is `{}`, which
+/// keeps upstream behavior.
+fn apply_embedded_brand() -> bool {
+    const BRAND: &str = include_str!("../res/brand/brand.json");
+    let Ok(mut data) =
+        serde_json::from_str::<std::collections::HashMap<String, serde_json::Value>>(BRAND)
+    else {
+        log::error!("Failed to parse embedded brand config");
+        return false;
+    };
+    if data.is_empty() {
+        return false;
+    }
+    if let Some(app_name) = data.remove("app-name") {
+        if let Some(app_name) = app_name.as_str() {
+            *config::APP_NAME.write().unwrap() = app_name.to_owned();
+        }
+    }
+    let mut map_display_settings = HashMap::new();
+    for s in keys::KEYS_DISPLAY_SETTINGS {
+        map_display_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_local_settings = HashMap::new();
+    for s in keys::KEYS_LOCAL_SETTINGS {
+        map_local_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut map_settings = HashMap::new();
+    for s in keys::KEYS_SETTINGS {
+        map_settings.insert(s.replace("_", "-"), s);
+    }
+    let mut buildin_settings = HashMap::new();
+    for s in keys::KEYS_BUILDIN_SETTINGS {
+        buildin_settings.insert(s.replace("_", "-"), s);
+    }
+    for (name, is_override) in [("default-settings", false), ("override-settings", true)] {
+        if let Some(settings) = data.remove(name) {
+            read_custom_client_advanced_settings(
+                settings,
+                &map_display_settings,
+                &map_local_settings,
+                &map_settings,
+                &buildin_settings,
+                is_override,
+            );
+        }
+    }
+    for (k, v) in data {
+        if let Some(v) = v.as_str() {
+            config::HARD_SETTINGS
+                .write()
+                .unwrap()
+                .insert(k, v.to_owned());
+        };
+    }
+    true
+}
+
+/// Branded builds can refuse a session whose peer identity could not be
+/// verified instead of asking the user (builtin option `enforce-e2ee`).
+#[inline]
+pub fn is_insecure_connection_refused() -> bool {
+    get_builtin_option("enforce-e2ee") == "Y"
 }
 
 #[inline]
